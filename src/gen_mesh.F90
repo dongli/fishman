@@ -7,7 +7,6 @@ program gen_mesh
   use array_mod
   use linked_list_mod
   use delaunay_voronoi_mod
-  use sphere_geometry_mod
 
   implicit none
 
@@ -24,22 +23,24 @@ program gen_mesh
 
   call delaunay_voronoi_init(nx, x=x(:,1), y=x(:,2), z=x(:,3))
   call delaunay_triangulation()
-  call voronoi_diagram()
+  call voronoi_diagram(all=.true.)
   call delaunay_voronoi_output(output)
 
   deallocate(x)
 
 contains
 
-  subroutine output(DVT_array, DT_list, VVT_array, VC_array, tag)
+  subroutine output(DVT_array, DT_list, DE_array, VVT_array, VC_array, VE_array, tag)
 
     type(array_type), intent(in) :: DVT_array
     type(linked_list_type), intent(in) :: DT_list
+    type(array_type), intent(in) :: DE_array
     type(array_type), intent(in) :: VVT_array
     type(array_type), intent(in) :: VC_array
+    type(array_type), intent(in) :: VE_array
     character(*), intent(in), optional :: tag
 
-    integer i, j, k, num_DE, num_VE
+    integer i, j, k
     real(8), allocatable :: lon_DVT(:)
     real(8), allocatable :: lat_DVT(:)
     real(8), allocatable :: lon_VVT(:)
@@ -50,21 +51,21 @@ contains
     integer, allocatable :: VE_VVT_idx(:,:)
     type(linked_list_iterator_type) iterator
     type(delaunay_vertex_type), pointer :: DVT, DVT1, DVT2
-    type(delaunay_triangle_type), pointer :: adjDT
+    type(delaunay_triangle_type), pointer :: DT
+    type(delaunay_edge_type), pointer :: DE
     type(voronoi_vertex_type), pointer :: VVT, VVT1, VVT2
     type(voronoi_cell_type), pointer :: adjVC, VC
+    type(voronoi_edge_type), pointer :: VE
 
-    num_DE = euler_formula(num_cell=DT_list%size, num_vertex=DVT_array%size)
-    num_VE = euler_formula(num_cell=VC_array%size, num_vertex=VVT_array%size)
 
     allocate(lon_DVT(DVT_array%size))
     allocate(lat_DVT(DVT_array%size))
     allocate(lon_VVT(VVT_array%size))
     allocate(lat_VVT(VVT_array%size))
     allocate(DT_DVT_idx(3,DT_list%size))
-    allocate(DE_DVT_idx(2,num_DE))
+    allocate(DE_DVT_idx(2,DE_array%size))
     allocate(VC_VVT_idx(6,VC_array%size))
-    allocate(VE_VVT_idx(2,num_VE))
+    allocate(VE_VVT_idx(2,VE_array%size))
 
     do i = 1, DVT_array%size
       select type (DVT => DVT_array%value_at(i))
@@ -83,52 +84,44 @@ contains
     end do
 
     i = 1
-    j = 1
     iterator = linked_list_iterator(DT_list)
     do while (.not. iterator%ended())
-      select type (DT => iterator%value)
-      type is (delaunay_triangle_type)
-        do k = 1, 3
-          DVT => get_DVT(DT%DVT, k)
-          DT_DVT_idx(k,i) = DVT%id
-          adjDT => get_DT(DT%adjDT, k)
-          if (adjDT%id > DT%id) then
-            DVT1 => get_DVT(DT%DVT, ip1(k))
-            DVT2 => get_DVT(DT%DVT, im1(k))
-            DE_DVT_idx(1,j) = DVT1%id
-            DE_DVT_idx(2,j) = DVT2%id
-            j = j + 1 
-          end if
-        end do
-      end select
+      DT => get_DT(iterator%value)
+      do k = 1, DT%DVT%size
+        DVT => get_DVT(DT%DVT, k)
+        DT_DVT_idx(k,i) = DVT%id
+      end do
       i = i + 1
       call iterator%next()
     end do
 
-    j = 1
+    do i = 1, DE_array%size
+      DE => get_DE(DE_array, i)
+      DE_DVT_idx(1,i) = DE%DVT1%id
+      DE_DVT_idx(2,i) = DE%DVT2%id
+    end do
+
     do i = 1, VC_array%size
       VC => get_VC(VC_array, i)
       do k = 1, VC%VVT%size
         VVT => get_VVT(VC%VVT, k)
         VC_VVT_idx(k,i) = VVT%id
-        adjVC => get_VC(VC%adjVC, k)
-        if (adjVC%id > VC%id) then
-          VVT1 => get_VVT(VC%VVT, k)
-          VVT2 => get_VVT(VC%VVT, merge(1, k + 1, k == VC%VVT%size))
-          VE_VVT_idx(1,j) = VVT1%id
-          VE_VVT_idx(2,j) = VVT2%id
-          j = j + 1 
-        end if
       end do
+    end do
+
+    do i = 1, VE_array%size
+      VE => get_VE(VE_array, i)
+      VE_VVT_idx(1,i) = VE%VVT1%id
+      VE_VVT_idx(2,i) = VE%VVT2%id
     end do
 
     call io_create_dataset(name='delaunay', file_path='mesh.' // trim(to_string(nx)) // '.nc', mode='output')
     call io_add_dim('num_DVT', size=DVT_array%size, dataset_name='delaunay')
     call io_add_dim('num_DT',  size=DT_list%size,   dataset_name='delaunay')
-    call io_add_dim('num_DE',  size=num_DE,         dataset_name='delaunay')
+    call io_add_dim('num_DE',  size=DE_array%size,  dataset_name='delaunay')
     call io_add_dim('num_VVT', size=VVT_array%size, dataset_name='delaunay')
     call io_add_dim('num_VC',  size=VC_array%size,  dataset_name='delaunay')
-    call io_add_dim('num_VE',  size=num_DE,         dataset_name='delaunay')
+    call io_add_dim('num_VE',  size=VE_array%size,  dataset_name='delaunay')
     call io_add_dim('TWO',     size=2,              dataset_name='delaunay')
     call io_add_dim('THREE',   size=3,              dataset_name='delaunay')
     call io_add_dim('SIX',     size=6,              dataset_name='delaunay')
