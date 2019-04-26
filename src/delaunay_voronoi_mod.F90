@@ -4,6 +4,7 @@ module delaunay_voronoi_mod
   use log_mod
   use string_mod
   use random_number_mod
+  use math_mod
   use sphere_geometry_mod
   use linked_list_mod
   use array_mod
@@ -28,8 +29,6 @@ module delaunay_voronoi_mod
   public get_VVT
   public get_VC
   public get_VE
-  public im1
-  public ip1
 
   type, extends(point_type) :: delaunay_vertex_type
     integer :: id = -1
@@ -76,6 +75,7 @@ module delaunay_voronoi_mod
   type, extends(point_type) :: voronoi_vertex_type
     integer :: id = -1
     type(delaunay_triangle_type), pointer :: DT
+    type(array_type) VE
   contains
     procedure :: init => voronoi_vertex_init
   end type voronoi_vertex_type
@@ -364,9 +364,10 @@ contains
     type(voronoi_vertex_type) VVT
     type(voronoi_vertex_type), pointer :: VVT1, VVT2
     type(voronoi_edge_type) VE
-    type(voronoi_edge_type), pointer :: VE1
+    type(voronoi_edge_type), pointer :: VE1, VE2
     type(voronoi_cell_type), pointer :: VC, adjVC
-    integer i, j, k
+    integer i, j, k, VE_idx(6)
+    logical matched
 
     ! Calculate Voronoi vertices which is the circumcenter of Delaunay triangles.
     global_VVT_array = array(global_DT_list%size)
@@ -438,8 +439,69 @@ contains
             VE%VC1 => VC
             VE%VC2 => adjVC
             call global_VE_array%append(VE)
+            ! We need to append the pointer to the inserted VE.
+            call VE%VC1%VE%append_ptr(global_VE_array%last_value())
+            call VE%VC2%VE%append_ptr(global_VE_array%last_value())
+            call VE%VVT1%VE%append_ptr(global_VE_array%last_value())
+            call VE%VVT2%VE%append_ptr(global_VE_array%last_value())
             k = k + 1
           end if
+        end do
+      end do
+      ! Fix the order of VE in VC.
+      do i = 1, global_VC_array%size
+        VC => get_VC(global_VC_array, i)
+        VE1 => get_VE(VC%VE, 1)
+        VE_idx(1) = VE1%id
+        do j = 2, VC%VE%size
+          matched = .false.
+          do k = 2, VC%VE%size
+            VE2 => get_VE(VC%VE, k)
+            if (VE1%id == VE2%id) cycle
+            ! Keep VC on the left size of VE.
+            if (associated(VE1%VC1, VC)) then
+              matched = (associated(VE2%VC1, VC) .and. VE1%VVT2%id == VE2%VVT1%id) .or. (associated(VE2%VC2, VC) .and. VE1%VVT2%id == VE2%VVT2%id)
+            else if (associated(VE1%VC2, VC)) then
+              matched = (associated(VE2%VC1, VC) .and. VE1%VVT1%id == VE2%VVT1%id) .or. (associated(VE2%VC2, VC) .and. VE1%VVT1%id == VE2%VVT2%id)
+            end if
+            if (matched) then
+              VE_idx(j) = VE2%id
+              VE1 => VE2
+              exit
+            end if
+          end do
+        end do
+        ! Replace the VE pointers.
+        do j = 1, VC%VE%size
+          call VC%VE%replace_ptr_at(j, get_VE(global_VE_array, VE_idx(j)))
+        end do
+      end do
+      ! Fix the order of VE in VVT.
+      do i = 1, global_VVT_array%size
+        VVT1 => get_VVT(global_VVT_array, i)
+        VE1 => get_VE(VVT1%VE, 1)
+        VE_idx(1) = VE1%id
+        do j = 2, VVT1%VE%size
+          matched = .false.
+          do k = 2, VVT1%VE%size
+            VE2 => get_VE(VVT1%VE, k)
+            if (VE1%id == VE2%id) cycle
+            ! Keep VC on the left size of VE.
+            if (associated(VE1%VVT1, VVT1)) then
+              matched = (associated(VE2%VVT1, VVT1) .and. VE1%VC2%id == VE2%VC1%id) .or. (associated(VE2%VVT2, VVT1) .and. VE1%VC2%id == VE2%VC2%id)
+            else if (associated(VE1%VVT2, VVT1)) then
+              matched = (associated(VE2%VVT1, VVT1) .and. VE1%VC1%id == VE2%VC1%id) .or. (associated(VE2%VVT2, VVT1) .and. VE1%VC1%id == VE2%VC2%id)
+            end if
+            if (matched) then
+              VE_idx(j) = VE2%id
+              VE1 => VE2
+              exit
+            end if
+          end do
+        end do
+        ! Replace the VE pointers.
+        do j = 1, VVT1%VE%size
+          call VVT1%VE%replace_ptr_at(j, get_VE(global_VE_array, VE_idx(j)))
         end do
       end do
     end if
@@ -1375,6 +1437,7 @@ contains
     integer, intent(in) :: id
 
     this%id = id
+    this%VE = array(3)
 
   end subroutine voronoi_vertex_init
 
@@ -1393,6 +1456,9 @@ contains
     integer, intent(in) :: id
 
     this%id = id
+    this%VVT = array(6)
+    this%VE = array(6)
+    this%adjVC = array(6)
 
   end subroutine voronoi_cell_init
 
@@ -1402,6 +1468,7 @@ contains
 
     type(voronoi_vertex_type), pointer :: VVT
     type(voronoi_cell_type), pointer :: VC
+    type(voronoi_edge_type), pointer :: VE
     integer i
 
     write(*, *) 'Voronoi cell (' // trim(to_string(this%id)) // '): '
@@ -1424,6 +1491,16 @@ contains
       write(*, *)
     else
       write(*, *) '  Neightbor cells: Not connected with cells yet.'
+    end if
+    if (this%VE%size > 0) then
+      write(*, '(A)', advance='no') '   Edges: '
+      do i = 1, this%VE%size
+        VE => get_VE(this%VE, i)
+        write(*, '(A)', advance='no') trim(to_string(VE%id)) // ', '
+      end do
+      write(*, *)
+    else
+      write(*, *) '  Edges: Not connected with edges yet.'
     end if
 
   end subroutine voronoi_cell_print
