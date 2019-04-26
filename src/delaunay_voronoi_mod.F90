@@ -76,8 +76,10 @@ module delaunay_voronoi_mod
     integer :: id = -1
     type(delaunay_triangle_type), pointer :: DT
     type(array_type) VE
+    type(array_type) VC
   contains
     procedure :: init => voronoi_vertex_init
+    procedure :: print => voronoi_vertex_print
   end type voronoi_vertex_type
 
   type voronoi_edge_type
@@ -88,6 +90,7 @@ module delaunay_voronoi_mod
     type(voronoi_cell_type), pointer :: VC2
   contains
     procedure :: init => voronoi_edge_init
+    procedure :: print => voronoi_edge_print
   end type voronoi_edge_type
 
   type voronoi_cell_type
@@ -355,7 +358,7 @@ contains
 
   subroutine voronoi_diagram(all)
 
-    logical, intent(in), optional :: all
+    logical, intent(in), optional :: all ! If extract all topological information or not.
 
     type(linked_list_iterator_type) DT_iterator, DVT_iterator
     type(delaunay_triangle_type), pointer :: DT, DT1, DT2, adjDT
@@ -365,11 +368,15 @@ contains
     type(voronoi_vertex_type), pointer :: VVT1, VVT2
     type(voronoi_edge_type) VE
     type(voronoi_edge_type), pointer :: VE1, VE2
-    type(voronoi_cell_type), pointer :: VC, adjVC
-    integer i, j, k, VE_idx(6)
+    type(voronoi_cell_type), pointer :: VC, VC1, VC2, adjVC
+    integer i, j, k
+    integer j_first_VE, j_VE
+    integer j_first_VC, j_VC
+    integer VE_idx(6)
+    integer VC_idx(3)
     logical matched
 
-    ! Calculate Voronoi vertices which is the circumcenter of Delaunay triangles.
+    ! Calculate VVT which is the circumcenter of DT.
     global_VVT_array = array(global_DT_list%size)
     DT_iterator = linked_list_iterator(global_DT_list)
     i = 1
@@ -384,20 +391,21 @@ contains
       i = i + 1
     end do
 
-    ! Set edges for Voronoi cells.
+    ! Connect VC and VVT.
     do i = 1, global_VC_array%size
       VC => get_VC(global_VC_array, i)
       DVT => VC%center
       ! Loop on incDT of DVT.
       DT_iterator = linked_list_iterator(DVT%incDT)
-      do j = 1, DVT%linkDVT%size
-        linkDVT => get_DVT(DVT%linkDVT, j)
+      DVT_iterator = linked_list_iterator(DVT%linkDVT)
+      do while (.not. DT_iterator%ended(cyclic=.false.))
+        linkDVT => get_DVT(DVT_iterator%value)
         adjVC => get_VC(global_VC_array, linkDVT%id)
         call VC%adjVC%append_ptr(adjVC)
-        DT1 => get_DT(DT_iterator%value)
-        DT2 => get_DT(DT_iterator%next_item%value)
-        call VC%VVT%append_ptr(get_VVT(global_VVT_array, DT1%id))
+        DT => get_DT(DT_iterator%value)
+        call VC%VVT%append_ptr(get_VVT(global_VVT_array, DT%id))
         call DT_iterator%next()
+        call DVT_iterator%next()
       end do
     end do
 
@@ -438,6 +446,9 @@ contains
             VE%VVT2 => get_VVT(VC%VVT, merge(j + 1, 1, j /= VC%adjVC%size))
             VE%VC1 => VC
             VE%VC2 => adjVC
+            ! Link VVT and VC.
+            call VE%VVT1%VC%append_ptr(VC)
+            call VE%VVT2%VC%append_ptr(adjVC)
             call global_VE_array%append(VE)
             ! We need to append the pointer to the inserted VE.
             call VE%VC1%VE%append_ptr(global_VE_array%last_value())
@@ -451,21 +462,35 @@ contains
       ! Fix the order of VE in VC.
       do i = 1, global_VC_array%size
         VC => get_VC(global_VC_array, i)
-        VE1 => get_VE(VC%VE, 1)
-        VE_idx(1) = VE1%id
-        do j = 2, VC%VE%size
+        ! Find out the edge whose vertices contains the first vertex of VC.
+        VVT1 => get_VVT(VC%VVT, 1)
+        j_first_VE = -1
+        do j = 1, VC%VE%size
+          VE1 => get_VE(VC%VE, j)
+          ! Assume VC is on the left side of VE.
+          if ((VE1%VC1%id == VC%id .and. VE1%VVT1%id == VVT1%id) .or. (VE1%VC2%id == VC%id .and. VE1%VVT2%id == VVT1%id)) then
+            j_first_VE = j
+            VE_idx(1) = VE1%id
+            exit
+          end if
+        end do
+        if (j_first_VE == -1) call log_error('Internal error!', __FILE__, __LINE__)
+        j_VE = 2
+        do j = 1, VC%VE%size
+          if (j == j_first_VE) cycle
           matched = .false.
-          do k = 2, VC%VE%size
+          do k = 1, VC%VE%size
             VE2 => get_VE(VC%VE, k)
             if (VE1%id == VE2%id) cycle
-            ! Keep VC on the left size of VE.
-            if (associated(VE1%VC1, VC)) then
-              matched = (associated(VE2%VC1, VC) .and. VE1%VVT2%id == VE2%VVT1%id) .or. (associated(VE2%VC2, VC) .and. VE1%VVT2%id == VE2%VVT2%id)
-            else if (associated(VE1%VC2, VC)) then
-              matched = (associated(VE2%VC1, VC) .and. VE1%VVT1%id == VE2%VVT1%id) .or. (associated(VE2%VC2, VC) .and. VE1%VVT1%id == VE2%VVT2%id)
+            ! Keep VC on the left side of VE.
+            if (VE1%VC1%id == VC%id) then
+              matched = (VE2%VC1%id == VC%id .and. VE1%VVT2%id == VE2%VVT1%id) .or. (VE2%VC2%id == VC%id .and. VE1%VVT2%id == VE2%VVT2%id)
+            else if (VE1%VC2%id == VC%id) then
+              matched = (VE2%VC1%id == VC%id .and. VE1%VVT1%id == VE2%VVT1%id) .or. (VE2%VC2%id == VC%id .and. VE1%VVT1%id == VE2%VVT2%id)
             end if
             if (matched) then
-              VE_idx(j) = VE2%id
+              VE_idx(j_VE) = VE2%id
+              j_VE = j_VE + 1
               VE1 => VE2
               exit
             end if
@@ -486,11 +511,11 @@ contains
           do k = 2, VVT1%VE%size
             VE2 => get_VE(VVT1%VE, k)
             if (VE1%id == VE2%id) cycle
-            ! Keep VC on the left size of VE.
-            if (associated(VE1%VVT1, VVT1)) then
-              matched = (associated(VE2%VVT1, VVT1) .and. VE1%VC2%id == VE2%VC1%id) .or. (associated(VE2%VVT2, VVT1) .and. VE1%VC2%id == VE2%VC2%id)
-            else if (associated(VE1%VVT2, VVT1)) then
-              matched = (associated(VE2%VVT1, VVT1) .and. VE1%VC1%id == VE2%VC1%id) .or. (associated(VE2%VVT2, VVT1) .and. VE1%VC1%id == VE2%VC2%id)
+            ! Keep VC on the left side of VE.
+            if (VE1%VVT1%id == VVT1%id) then
+              matched = (VE2%VVT1%id == VVT1%id .and. VE1%VC1%id == VE2%VC2%id) .or. (VE2%VVT2%id == VVT1%id .and. VE1%VC1%id == VE2%VC1%id)
+            else if (VE1%VVT2%id == VVT1%id) then
+              matched = (VE2%VVT1%id == VVT1%id .and. VE1%VC2%id == VE2%VC2%id) .or. (VE2%VVT2%id == VVT1%id .and. VE1%VC2%id == VE2%VC1%id)
             end if
             if (matched) then
               VE_idx(j) = VE2%id
@@ -502,6 +527,46 @@ contains
         ! Replace the VE pointers.
         do j = 1, VVT1%VE%size
           call VVT1%VE%replace_ptr_at(j, get_VE(global_VE_array, VE_idx(j)))
+        end do
+      end do
+      ! Fix the order of VC in VVT.
+      do i = 1, global_VVT_array%size
+        VVT1 => get_VVT(global_VVT_array, i)
+        ! Find out the edge whose vertices contains the first vertex of VC.
+        VE1 => get_VE(VVT1%VE, 1)
+        j_first_VC = -1
+        VC_idx = -1
+        do j = 1, VVT1%VC%size
+          VC1 => get_VC(VVT1%VC, j)
+          if ((VE1%VVT1%id == VVT1%id .and. VE1%VC1%id == VC1%id) .or. (VE1%VVT2%id == VVT1%id .and. VE1%VC2%id == VC1%id)) then
+            j_first_VC = j
+            VC_idx(1) = VC1%id
+            exit
+          end if
+        end do
+        if (j_first_VC == -1) call log_error('Internal error!', __FILE__, __LINE__)
+        j_VC = 2
+        VE1 => get_VE(VVT1%VE, j_VC)
+        do j = 1, VVT1%VC%size
+          if (j == j_first_VC) cycle
+          do k = 1, VVT1%VC%size
+            VC2 => get_VC(VVT1%VC, k)
+            if (VC1%id == VC2%id) cycle
+            ! Keep VC on the left side of VE.
+            if ((VE1%VVT1%id == VVT1%id .and. VE1%VC1%id == VC2%id) .or. (VE1%VVT2%id == VVT1%id .and. VE1%VC2%id == VC2%id)) then
+              VC_idx(j_VC) = VC2%id
+              j_VC = j_VC + 1
+              if (j_VC <= VVT1%VC%size) then
+                VC1 => VC2
+                VE1 => get_VE(VVT1%VE, j_VC)
+              end if
+              exit
+            end if
+          end do
+        end do
+        ! Replace the VE pointers.
+        do j = 1, VVT1%VC%size
+          call VVT1%VC%replace_ptr_at(j, get_VC(global_VC_array, VC_idx(j)))
         end do
       end do
     end if
@@ -1441,6 +1506,38 @@ contains
 
   end subroutine voronoi_vertex_init
 
+  subroutine voronoi_vertex_print(this)
+
+    class(voronoi_vertex_type), intent(in) :: this
+
+    type(voronoi_edge_type), pointer :: VE
+    type(voronoi_cell_type), pointer :: VC
+    integer i
+
+    write(*, *) 'Voronoi vertex (' // trim(to_string(this%id)) // '): '
+    if (this%VE%size > 0) then
+      write(*, '(A)', advance='no') '   Edges: '
+      do i = 1, this%VE%size
+        VE => get_VE(this%VE, i)
+        write(*, '(A)', advance='no') trim(to_string(VE%id)) // ', '
+      end do
+      write(*, *)
+    else
+      write(*, *) '  Edges: Not connected with edges yet.'
+    end if
+    if (this%VC%size > 0) then
+      write(*, '(A)', advance='no') '   Cells: '
+      do i = 1, this%VC%size
+        VC => get_VC(this%VC, i)
+        write(*, '(A)', advance='no') trim(to_string(VC%id)) // ', '
+      end do
+      write(*, *)
+    else
+      write(*, *) '  Cells: Not connected with cells yet.'
+    end if
+
+  end subroutine voronoi_vertex_print
+
   subroutine voronoi_edge_init(this, id)
 
     class(voronoi_edge_type), intent(inout) :: this
@@ -1449,6 +1546,38 @@ contains
     this%id = id
 
   end subroutine voronoi_edge_init
+
+  subroutine voronoi_edge_print(this)
+
+    class(voronoi_edge_type), intent(in) :: this
+
+    write(*, *) 'Voronoi edge (' // trim(to_string(this%id)) // '): '
+    write(*, '(A)', advance='no') '   Vertices: '
+    if (associated(this%VVT1)) then
+      write(*, '(A)', advance='no') trim(to_string(this%VVT1%id)) // ', '
+    else
+      write(*, '(A)', advance='no') 'NaN, '
+    end if
+    if (associated(this%VVT2)) then
+      write(*, '(A)', advance='no') trim(to_string(this%VVT2%id)) // ', '
+    else
+      write(*, '(A)', advance='no') 'NaN'
+    end if
+    write(*, *)
+    write(*, '(A)', advance='no') '   Cells: '
+    if (associated(this%VC1)) then
+      write(*, '(A)', advance='no') trim(to_string(this%VC1%id)) // ', '
+    else
+      write(*, '(A)', advance='no') 'NaN, '
+    end if
+    if (associated(this%VC2)) then
+      write(*, '(A)', advance='no') trim(to_string(this%VC2%id)) // ', '
+    else
+      write(*, '(A)', advance='no') 'NaN'
+    end if
+    write(*, *)
+
+  end subroutine voronoi_edge_print
 
   subroutine voronoi_cell_init(this, id)
 

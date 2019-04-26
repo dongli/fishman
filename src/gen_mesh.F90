@@ -7,6 +7,7 @@ program gen_mesh
   use array_mod
   use linked_list_mod
   use delaunay_voronoi_mod
+  use mpas_mesh_mod
 
   implicit none
 
@@ -14,7 +15,7 @@ program gen_mesh
   real(8), allocatable :: x(:,:)
 
   allocate(x(nx,3))
-  
+
   call io_init()
   call io_create_dataset(name='grids', file_path='./point.' // trim(to_string(nx)) // '.nc', mode='input')
   call io_start_input('grids')
@@ -57,6 +58,7 @@ contains
     type(voronoi_cell_type), pointer :: adjVC, VC
     type(voronoi_edge_type), pointer :: VE
 
+    type(mpas_mesh_type) mesh
 
     allocate(lon_DVT(DVT_array%size))
     allocate(lat_DVT(DVT_array%size))
@@ -143,6 +145,9 @@ contains
     call io_output('VC_VVT_idx', VC_VVT_idx, dataset_name='delaunay')
     call io_output('VE_VVT_idx', VE_VVT_idx, dataset_name='delaunay')
     call io_end_output('delaunay')
+
+    call mpas_mesh_run(DVT_array, DT_list, DE_array, VVT_array, VC_array, VE_array, mesh)
+    call mpas_mesh_output(mesh)
 
   end subroutine output
 

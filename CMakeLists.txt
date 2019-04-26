@@ -51,6 +51,7 @@ set(sources
   src/sphere_geometry_mod.F90
   src/io_mod.F90
   src/delaunay_voronoi_mod.F90
+  src/mpas_mesh_mod.F90
 )
 
 add_library(fishman ${sources})
