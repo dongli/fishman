@@ -320,30 +320,6 @@ contains
     end if
 
     dim%name = name
-    if (.not. present(long_name)) then
-      select case (name)
-      case ('lon', 'ilon')
-        dim%long_name = 'Longitude'
-      case ('lat', 'ilat')
-        dim%long_name = 'Latitude'
-      case ('time', 'Time')
-        dim%long_name = 'Time'
-      case default
-        dim%long_name = long_name
-      end select
-    end if
-    if (.not. present(units)) then
-      select case (name)
-      case ('lon', 'ilon')
-        dim%units = 'degrees_east'
-      case ('lat', 'ilat')
-        dim%units = 'degrees_north'
-      case ('time', 'Time')
-        write(dim%units, '(A, " since ", A)') trim(time_units_str), trim(start_time_str)
-      case default
-        dim%units = units
-      end select
-    end if
     if (.not. present(size)) then
       dim%size = NF90_UNLIMITED
     else
@@ -354,6 +330,30 @@ contains
 
     if (present(add_var) .and. add_var) then
       ! Add corresponding dimension variable.
+      if (.not. present(long_name)) then
+        select case (name)
+        case ('lon', 'ilon')
+          dim%long_name = 'Longitude'
+        case ('lat', 'ilat')
+          dim%long_name = 'Latitude'
+        case ('time', 'Time')
+          dim%long_name = 'Time'
+        case default
+          dim%long_name = long_name
+        end select
+      end if
+      if (.not. present(units)) then
+        select case (name)
+        case ('lon', 'ilon')
+          dim%units = 'degrees_east'
+        case ('lat', 'ilat')
+          dim%units = 'degrees_north'
+        case ('time', 'Time')
+          write(dim%units, '(A, " since ", A)') trim(time_units_str), trim(start_time_str)
+        case default
+          dim%units = units
+        end select
+      end if
       call io_add_var(name, dataset_name, long_name=dim%long_name, units=dim%units, dim_names=[name], data_type='real(8)')
     end if
 
