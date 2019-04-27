@@ -78,8 +78,8 @@ module io_mod
   end interface io_get_att
 
   interface io_input
-    module procedure io_input_1d_r8
-    module procedure io_input_2d_r8
+    module procedure io_input_1d
+    module procedure io_input_2d
   end interface io_input
 
   interface
@@ -567,6 +567,8 @@ contains
       ierr = NF90_PUT_VAR(dataset%id, var%id, value)
     type is (real(8))
       ierr = NF90_PUT_VAR(dataset%id, var%id, value)
+    class default
+      call log_error('Unsupported array type!', __FILE__, __LINE__)
     end select
     if (ierr /= NF90_NOERR) then
       call log_error('Failed to write variable ' // trim(name) // ' in dataset ' // trim(dataset%name) // '! ' // trim(NF90_STRERROR(ierr)))
@@ -617,6 +619,8 @@ contains
       ierr = NF90_PUT_VAR(dataset%id, var%id, array(lb:ub), start, count)
     type is (real(8))
       ierr = NF90_PUT_VAR(dataset%id, var%id, array(lb:ub), start, count)
+    class default
+      call log_error('Unsupported array type!', __FILE__, __LINE__)
     end select
     if (ierr /= NF90_NOERR) then
       call log_error('Failed to write variable ' // trim(name) // ' in dataset ' // trim(dataset%name) // '! ' // trim(NF90_STRERROR(ierr)))
@@ -663,6 +667,8 @@ contains
       ierr = NF90_PUT_VAR(dataset%id, var%id, array(lb1:ub1,lb2:ub2), start, count)
     type is (real(8))
       ierr = NF90_PUT_VAR(dataset%id, var%id, array(lb1:ub1,lb2:ub2), start, count)
+    class default
+      call log_error('Unsupported array type!', __FILE__, __LINE__)
     end select
     if (ierr /= NF90_NOERR) then
       call log_error('Failed to write variable ' // trim(name) // ' to ' // trim(dataset%name) // '!' // NF90_STRERROR(ierr))
@@ -734,16 +740,15 @@ contains
 
   end function io_get_att_str
 
-  subroutine io_input_1d_r8(name, array, dataset_name)
+  subroutine io_input_1d(name, array, dataset_name)
 
     character(*), intent(in) :: name
-    real(8), intent(out) :: array(:)
+    class(*), intent(out) :: array(:)
     character(*), intent(in), optional :: dataset_name
 
     type(dataset_type), pointer :: dataset
     integer lb, ub
-    integer i, ierr, varid
-    real(8), allocatable :: buffer(:)
+    integer ierr, varid
 
     if (present(dataset_name)) then
       dataset => get_dataset(name=dataset_name, mode='input')
@@ -753,32 +758,34 @@ contains
 
     lb = lbound(array, 1)
     ub = ubound(array, 1)
-    allocate(buffer(lb:ub))
 
     ierr = NF90_INQ_VARID(dataset%id, name, varid)
     if (ierr /= NF90_NOERR) then
-      call log_error('No variable "' // trim(name) // '" in dataset "' // trim(dataset%file_path) // '"!')
+      call log_error('No variable "' // trim(name) // '" in dataset "' // trim(dataset%file_path) // '"!', __FILE__, __LINE__)
     end if
-    ierr = NF90_GET_VAR(dataset%id, varid, buffer)
+    select type (array)
+    type is (integer)
+      ierr = NF90_GET_VAR(dataset%id, varid, array)
+    type is (real(8))
+      ierr = NF90_GET_VAR(dataset%id, varid, array)
+    class default
+      call log_error('Unsupported array type!', __FILE__, __LINE__)
+    end select
+    if (ierr /= NF90_NOERR) then
+      call log_error('Failed to read variable "' // trim(name) // '" in dataset "' // trim(dataset%file_path) // '"!', __FILE__, __LINE__)
+    end if
 
-    do i = lb, ub
-      array(i) = buffer(i)
-    end do
+  end subroutine io_input_1d
 
-    deallocate(buffer)
-
-  end subroutine io_input_1d_r8
-
-  subroutine io_input_2d_r8(name, array, dataset_name)
+  subroutine io_input_2d(name, array, dataset_name)
 
     character(*), intent(in) :: name
-    real(8), intent(out) :: array(:,:)
+    class(*), intent(out) :: array(:,:)
     character(*), intent(in), optional :: dataset_name
 
     type(dataset_type), pointer :: dataset
     integer lb1, ub1, lb2, ub2
-    integer i, j, ierr, varid
-    real(8), allocatable :: buffer(:,:)
+    integer ierr, varid
 
     if (present(dataset_name)) then
       dataset => get_dataset(name=dataset_name, mode='input')
@@ -790,23 +797,24 @@ contains
     ub1 = ubound(array, 1)
     lb2 = lbound(array, 2)
     ub2 = ubound(array, 2)
-    allocate(buffer(lb1:ub1,lb2:ub2))
 
     ierr = NF90_INQ_VARID(dataset%id, name, varid)
     if (ierr /= NF90_NOERR) then
-      call log_error('No variable "' // trim(name) // '" in dataset "' // trim(dataset%file_path) // '"!')
+      call log_error('No variable "' // trim(name) // '" in dataset "' // trim(dataset%file_path) // '"!', __FILE__, __LINE__)
     end if
-    ierr = NF90_GET_VAR(dataset%id, varid, buffer)
+    select type (array)
+    type is (integer)
+      ierr = NF90_GET_VAR(dataset%id, varid, array)
+    type is (real(8))
+      ierr = NF90_GET_VAR(dataset%id, varid, array)
+    class default
+      call log_error('Unsupported array type!', __FILE__, __LINE__)
+    end select
+    if (ierr /= NF90_NOERR) then
+      call log_error('Failed to read variable "' // trim(name) // '" in dataset "' // trim(dataset%file_path) // '"! ' // NF90_STRERROR(ierr), __FILE__, __LINE__)
+    end if
 
-    do j = lb2, ub2
-      do i = lb1, ub1
-        array(i,j) = buffer(i,j)
-      end do
-    end do
-
-    deallocate(buffer)
-
-  end subroutine io_input_2d_r8
+  end subroutine io_input_2d
 
   subroutine io_end_input(dataset_name)
 
