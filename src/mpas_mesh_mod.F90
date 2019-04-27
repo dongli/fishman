@@ -277,7 +277,7 @@ contains
       call log_error('Too large total kite area error!', __FILE__, __LINE__)
     end if
 
-    call calc_weightsOnEdge(VVT_array, VC_array, VE_array, mesh)
+    call calc_weightsOnEdge(mesh)
 
   end subroutine mpas_mesh_run
 
@@ -422,11 +422,8 @@ contains
 
   end subroutine mpas_mesh_finalize
 
-  subroutine calc_weightsOnEdge(VVT_array, VC_array, VE_array, mesh)
+  subroutine calc_weightsOnEdge(mesh)
 
-    type(array_type), intent(in) :: VVT_array
-    type(array_type), intent(in) :: VC_array
-    type(array_type), intent(in) :: VE_array
     type(mpas_mesh_type), intent(inout) :: mesh
 
     real(8), allocatable :: R(:,:)
@@ -448,28 +445,35 @@ contains
         do iLocalVertex = 1, mesh%nEdgesOnCell(iCell)
           if (mesh%verticesOnCell(iLocalVertex,iCell) == iVertex) exit
         end do
+        if (iLocalVertex > mesh%nEdgesOnCell(iCell)) call log_error('Internal error!', __FILE__, __LINE__)
         R(iLocalVertex,iCell) = mesh%kiteAreasOnVertex(iLocalCell,iVertex) / mesh%areaCell(iCell)
       end do
     end do
     ! Set normal vector indicator.
     n = 0
     do iCell = 1, mesh%nCells
-      do i = 1, mesh%nEdgesOnCell(iCell)
-        if (iCell == mesh%cellsOnEdge(1,mesh%edgesOnCell(i,iCell))) then
-          n(i,iCell) =  1
-        else if (iCell == mesh%cellsOnEdge(2,mesh%edgesOnCell(i,iCell))) then
-          n(i,iCell) = -1
+      do iLocalEdge = 1, mesh%nEdgesOnCell(iCell)
+        iEdge = mesh%edgesOnCell(iLocalEdge,iCell)
+        if (iCell == mesh%cellsOnEdge(1,iEdge)) then
+          n(iLocalEdge,iCell) =  1
+        else if (iCell == mesh%cellsOnEdge(2,iEdge)) then
+          n(iLocalEdge,iCell) = -1
+        else
+          call log_error('Internal error!', __FILE__, __LINE__)
         end if
       end do
     end do
     ! Set tangential vector indicator.
     t = 0
     do iVertex = 1, mesh%nVertices
-      do i = 1, vertexDegree
-        if (iVertex == mesh%verticesOnEdge(1,mesh%edgesOnVertex(i,iVertex))) then
-          t(i,iVertex) =  1
-        else if (iVertex == mesh%verticesOnEdge(2,mesh%edgesOnVertex(i,iVertex))) then
-          t(i,iVertex) = -1
+      do iLocalEdge = 1, vertexDegree
+        iEdge = mesh%edgesOnVertex(iLocalEdge,iVertex)
+        if (iVertex == mesh%verticesOnEdge(1,iEdge)) then
+          t(iLocalEdge,iVertex) =  1
+        else if (iVertex == mesh%verticesOnEdge(2,iEdge)) then
+          t(iLocalEdge,iVertex) = -1
+        else
+          call log_error('Internal error!', __FILE__, __LINE__)
         end if
       end do
     end do
@@ -512,7 +516,7 @@ contains
           if (mesh%edgesOnVertex(iLocalEdgeOnVertex,iVertex) == iEdgeOnEdge) exit
         end do
         mesh%weightsOnEdge(i,iEdge) = n(iLocalEdge,iCell) / t(iLocalEdgeOnVertex,iVertex) * (mesh%weightsOnEdge(i,iEdge) - 0.5)
-        mesh%weightsOnEdge(i,iEdge) = mesh%weightsOnEdge(i,iEdge) * mesh%dcEdge(iEdge) / mesh%dvEdge(iEdgeOnEdge)
+        mesh%weightsOnEdge(i,iEdge) = mesh%weightsOnEdge(i,iEdge) * mesh%dvEdge(iEdge) / mesh%dcEdge(iEdgeOnEdge)
       end do
     end do
     deallocate(R)
