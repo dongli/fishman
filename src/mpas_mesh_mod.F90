@@ -18,7 +18,7 @@ module mpas_mesh_mod
   public mpas_mesh_type
 
   integer, parameter :: vertexDegree = 3
-  integer, parameter :: maxEdges = 15
+  integer, parameter :: maxEdges = 10
   integer, parameter :: maxEdges2 = maxEdges * 2
 
   type mpas_mesh_type
@@ -68,6 +68,7 @@ module mpas_mesh_mod
     ! Weights
     real(8), allocatable :: weightsOnEdge(:,:)      ! Weights to reconstruct tangential velocities
   contains
+    procedure :: init => mpas_mesh_init
     final :: mpas_mesh_finalize
   end type mpas_mesh_type
 
@@ -95,47 +96,7 @@ contains
     type(linked_list_iterator_type) iterator
     type(point_type) xp
 
-    mesh%nCells = VC_array%size
-    mesh%nEdges = VE_array%size
-    mesh%nVertices = VVT_array%size
-
-    allocate(mesh%latCell          (mesh%nCells))
-    allocate(mesh%lonCell          (mesh%nCells))
-    allocate(mesh%xCell            (mesh%nCells))
-    allocate(mesh%yCell            (mesh%nCells))
-    allocate(mesh%zCell            (mesh%nCells))
-    allocate(mesh%indexToCellID    (mesh%nCells))
-    allocate(mesh%lonEdge          (mesh%nEdges))
-    allocate(mesh%latEdge          (mesh%nEdges))
-    allocate(mesh%xEdge            (mesh%nEdges))
-    allocate(mesh%yEdge            (mesh%nEdges))
-    allocate(mesh%zEdge            (mesh%nEdges))
-    allocate(mesh%indexToEdgeID    (mesh%nEdges))
-    allocate(mesh%lonVertex        (mesh%nVertices))
-    allocate(mesh%latVertex        (mesh%nVertices))
-    allocate(mesh%xVertex          (mesh%nVertices))
-    allocate(mesh%yVertex          (mesh%nVertices))
-    allocate(mesh%zVertex          (mesh%nVertices))
-    allocate(mesh%indexToVertexID  (mesh%nVertices))
-    allocate(mesh%nEdgesOnCell     (mesh%nCells))
-    allocate(mesh%nEdgesOnEdge     (mesh%nEdges))
-    allocate(mesh%cellsOnCell      (maxEdges,mesh%nCells))
-    allocate(mesh%cellsOnEdge      (2,mesh%nEdges))
-    allocate(mesh%edgesOnCell      (maxEdges,mesh%nCells))
-    allocate(mesh%edgesOnEdge      (maxEdges2,mesh%nEdges))
-    allocate(mesh%verticesOnCell   (maxEdges,mesh%nCells))
-    allocate(mesh%verticesOnEdge   (2,mesh%nEdges))
-    allocate(mesh%edgesOnVertex    (vertexDegree,mesh%nVertices))
-    allocate(mesh%cellsOnVertex    (vertexDegree,mesh%nVertices))
-    allocate(mesh%weightsOnEdge    (maxEdges2,mesh%nEdges))
-    allocate(mesh%dvEdge           (mesh%nEdges))
-    allocate(mesh%dv1Edge          (mesh%nEdges))
-    allocate(mesh%dv2Edge          (mesh%nEdges))
-    allocate(mesh%dcEdge           (mesh%nEdges))
-    allocate(mesh%angleEdge        (mesh%nEdges))
-    allocate(mesh%areaCell         (mesh%nCells))
-    allocate(mesh%areaTriangle     (mesh%nVertices))
-    allocate(mesh%kiteAreasOnVertex(vertexDegree,mesh%nVertices))
+    call mesh%init(VC_array%size, VE_array%size, VVT_array%size)
 
     do iCell = 1, mesh%nCells
       VC => get_VC(VC_array, iCell)
@@ -376,6 +337,57 @@ contains
     call io_end_output(dataset_name='mpas_mesh')
 
   end subroutine mpas_mesh_output
+
+  subroutine mpas_mesh_init(this, nCells, nEdges, nVertices)
+
+    class(mpas_mesh_type), intent(inout) :: this
+    integer, intent(in) :: nCells
+    integer, intent(in) :: nEdges
+    integer, intent(in) :: nVertices
+
+    this%nCells = nCells
+    this%nEdges = nEdges
+    this%nVertices = nVertices
+
+    allocate(this%latCell          (this%nCells))
+    allocate(this%lonCell          (this%nCells))
+    allocate(this%xCell            (this%nCells))
+    allocate(this%yCell            (this%nCells))
+    allocate(this%zCell            (this%nCells))
+    allocate(this%indexToCellID    (this%nCells))
+    allocate(this%lonEdge          (this%nEdges))
+    allocate(this%latEdge          (this%nEdges))
+    allocate(this%xEdge            (this%nEdges))
+    allocate(this%yEdge            (this%nEdges))
+    allocate(this%zEdge            (this%nEdges))
+    allocate(this%indexToEdgeID    (this%nEdges))
+    allocate(this%lonVertex        (this%nVertices))
+    allocate(this%latVertex        (this%nVertices))
+    allocate(this%xVertex          (this%nVertices))
+    allocate(this%yVertex          (this%nVertices))
+    allocate(this%zVertex          (this%nVertices))
+    allocate(this%indexToVertexID  (this%nVertices))
+    allocate(this%nEdgesOnCell     (this%nCells))
+    allocate(this%nEdgesOnEdge     (this%nEdges))
+    allocate(this%cellsOnCell      (maxEdges,this%nCells))
+    allocate(this%cellsOnEdge      (2,this%nEdges))
+    allocate(this%edgesOnCell      (maxEdges,this%nCells))
+    allocate(this%edgesOnEdge      (maxEdges2,this%nEdges))
+    allocate(this%verticesOnCell   (maxEdges,this%nCells))
+    allocate(this%verticesOnEdge   (2,this%nEdges))
+    allocate(this%edgesOnVertex    (vertexDegree,this%nVertices))
+    allocate(this%cellsOnVertex    (vertexDegree,this%nVertices))
+    allocate(this%weightsOnEdge    (maxEdges2,this%nEdges))
+    allocate(this%dvEdge           (this%nEdges))
+    allocate(this%dv1Edge          (this%nEdges))
+    allocate(this%dv2Edge          (this%nEdges))
+    allocate(this%dcEdge           (this%nEdges))
+    allocate(this%angleEdge        (this%nEdges))
+    allocate(this%areaCell         (this%nCells))
+    allocate(this%areaTriangle     (this%nVertices))
+    allocate(this%kiteAreasOnVertex(vertexDegree,this%nVertices))
+
+  end subroutine mpas_mesh_init
 
   subroutine mpas_mesh_finalize(this)
 
