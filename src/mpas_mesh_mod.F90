@@ -128,11 +128,9 @@ contains
       mesh%  xVertex(iVertex) = VVT%x
       mesh%  yVertex(iVertex) = VVT%y
       mesh%  zVertex(iVertex) = VVT%z
-      do i = 1, VVT%DT%DVT%size
-        DVT => get_DVT(VVT%DT%DVT, i)
-        mesh%cellsOnVertex(i,iVertex) = DVT%id
-      end do
-      do i = 1, VVT%VE%size
+      do i = 1, VVT%VC%size
+        VC => get_VC(VVT%VC, i)
+        mesh%cellsOnVertex(i,iVertex) = VC%id
         VE => get_VE(VVT%VE, i)
         mesh%edgesOnVertex(i,iVertex) = VE%id
       end do
@@ -430,7 +428,6 @@ contains
     if (allocated(this%areaCell))          deallocate(this%areaCell)
     if (allocated(this%areaTriangle))      deallocate(this%areaTriangle)
     if (allocated(this%kiteAreasOnVertex)) deallocate(this%kiteAreasOnVertex)
-
 
   end subroutine mpas_mesh_finalize
 

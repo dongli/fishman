@@ -568,6 +568,18 @@ contains
         do j = 1, VVT1%VC%size
           call VVT1%VC%replace_ptr_at(j, get_VC(global_VC_array, VC_idx(j)))
         end do
+#ifndef NDEBUG
+        ! Check order consistency.
+        do j = 1, VVT1%VE%size
+          VE1 => get_VE(VVT1%VE, j)
+          VC1 => get_VC(VVT1%VC, j)
+          if (VE1%VVT1%id == VVT1%id) then
+            if (VE1%VC1%id /= VC1%id) call log_error('Internal error!', __FILE__, __LINE__)
+          else
+            if (VE1%VC2%id /= VC1%id) call log_error('Internal error!', __FILE__, __LINE__)
+          end if
+        end do
+#endif
       end do
     end if
 
