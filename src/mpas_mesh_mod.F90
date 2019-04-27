@@ -245,18 +245,14 @@ contains
     end if
 
     total_area = 0.0
-    iVertex = 0
-    iterator = linked_list_iterator(DT_list)
-    do while (.not. iterator%ended())
-      DT => get_DT(iterator%value)
-      do i = 1, DT%DVT%size
-        DVT => get_DVT(DT%DVT, i)
+    do iVertex = 1, mesh%nVertices
+      VVT => get_VVT(VVT_array, iVertex)
+      do i = 1, VVT%DT%DVT%size
+        DVT => get_DVT(VVT%DT%DVT, i)
         x(i) = DVT%x; y(i) = DVT%y; z(i) = DVT%z
       end do
-      mesh%areaTriangle(iVertex) = calc_area(x(:DT%DVT%size), y(:DT%DVT%size), z(:DT%DVT%size))
+      mesh%areaTriangle(iVertex) = calc_area(x(:VVT%DT%DVT%size), y(:VVT%DT%DVT%size), z(:VVT%DT%DVT%size))
       total_area = total_area + mesh%areaTriangle(iVertex)
-      iVertex = iVertex + 1
-      call iterator%next()
     end do
     if (abs(total_area - 4 * pi) > 1.0d-10) then
       call log_error('Too large total triangle area error!', __FILE__, __LINE__)
@@ -280,6 +276,8 @@ contains
     if (abs(total_area - 4 * pi) > 1.0d-10) then
       call log_error('Too large total kite area error!', __FILE__, __LINE__)
     end if
+
+    call calc_weightsOnEdge(VVT_array, VC_array, VE_array, mesh)
 
   end subroutine mpas_mesh_run
 
@@ -423,5 +421,108 @@ contains
 
 
   end subroutine mpas_mesh_finalize
+
+  subroutine calc_weightsOnEdge(VVT_array, VC_array, VE_array, mesh)
+
+    type(array_type), intent(in) :: VVT_array
+    type(array_type), intent(in) :: VC_array
+    type(array_type), intent(in) :: VE_array
+    type(mpas_mesh_type), intent(inout) :: mesh
+
+    real(8), allocatable :: R(:,:)
+    integer, allocatable :: n(:,:), t(:,:)
+    integer iCell, iEdge, iEdgeOnEdge, iVertex, i, j, i0
+    integer iLocalCell, iLocalVertex
+    integer nEdgesOnCell
+    integer iLocalEdge1, iLocalEdge2, iLocalEdge, iLocalEdgeOnVertex
+
+    ! Calculate weightsOnEdge for reconstructing tangential velocities.
+    allocate(R(maxEdges,mesh%nCells))
+    allocate(n(maxEdges,mesh%nCells))
+    allocate(t(vertexDegree,mesh%nVertices))
+    ! Calculate divergence interpolation weights.
+    R = 0.0
+    do iVertex = 1, mesh%nVertices
+      do iLocalCell = 1, vertexDegree
+        iCell = mesh%cellsOnVertex(iLocalCell,iVertex)
+        do iLocalVertex = 1, mesh%nEdgesOnCell(iCell)
+          if (mesh%verticesOnCell(iLocalVertex,iCell) == iVertex) exit
+        end do
+        R(iLocalVertex,iCell) = R(iLocalVertex,iCell) + mesh%kiteAreasOnVertex(iLocalCell,iVertex)
+      end do
+    end do
+    do iCell = 1, mesh%nCells
+      nEdgesOnCell = mesh%nEdgesOnCell(iCell)
+      R(:nEdgesOnCell,iCell) = R(:nEdgesOnCell,iCell) / sum(R(:nEdgesOnCell,iCell))
+    end do
+    ! Set normal vector indicator.
+    n = 0
+    do iCell = 1, mesh%nCells
+      do i = 1, mesh%nEdgesOnCell(iCell)
+        if (iCell == mesh%cellsOnEdge(1,mesh%edgesOnCell(i,iCell))) then
+          n(i,iCell) =  1
+        else if (iCell == mesh%cellsOnEdge(2,mesh%edgesOnCell(i,iCell))) then
+          n(i,iCell) = -1
+        end if
+      end do
+    end do
+    ! Set tangential vector indicator.
+    t = 0
+    do iVertex = 1, mesh%nVertices
+      do i = 1, vertexDegree
+        if (iVertex == mesh%verticesOnEdge(1,mesh%edgesOnVertex(i,iVertex))) then
+          t(i,iVertex) =  1
+        else if (iVertex == mesh%verticesOnEdge(2,mesh%edgesOnVertex(i,iVertex))) then
+          t(i,iVertex) = -1
+        end if
+      end do
+    end do
+    do iEdge = 1, mesh%nEdges
+      ! Get the local index of edge on both side cells.
+      do iLocalEdge = 1, mesh%nEdgesOnCell(mesh%cellsOnEdge(1,iEdge))
+        if (mesh%edgesOnCell(iLocalEdge,mesh%cellsOnEdge(1,iEdge)) == iEdge) then
+          iLocalEdge1 = iLocalEdge
+          exit
+        end if
+      end do
+      do iLocalEdge = 1, mesh%nEdgesOnCell(mesh%cellsOnEdge(2,iEdge))
+        if (mesh%edgesOnCell(iLocalEdge,mesh%cellsOnEdge(2,iEdge)) == iEdge) then
+          iLocalEdge2 = iLocalEdge
+          exit
+        end if
+      end do
+      ! Loop through all the involved edges.
+      do i = 1, mesh%nEdgesOnEdge(iEdge)
+        iEdgeOnEdge = mesh%edgesOnEdge(i,iEdge)
+        if (any(mesh%cellsOnEdge(:,iEdgeOnEdge) == mesh%cellsOnEdge(1,iEdge))) then
+          ! For the first cell
+          i0 = 1
+          iCell = mesh%cellsOnEdge(1,iEdge)
+          iLocalEdge = iLocalEdge1
+        else
+          ! For the second cell
+          if (i0 == 1) i0 = i
+          iCell = mesh%cellsOnEdge(2,iEdge)
+          iLocalEdge = iLocalEdge2
+        end if
+        iLocalVertex = iLocalEdge
+        do j = i0, i
+          iLocalVertex = iLocalVertex + 1
+          if (iLocalVertex > mesh%nEdgesOnCell(iCell)) iLocalVertex = 1
+          iVertex = mesh%verticesOnCell(iLocalVertex,iCell)
+          mesh%weightsOnEdge(i,iEdge) = mesh%weightsOnEdge(i,iEdge) + R(iLocalVertex,iCell)
+        end do
+        do iLocalEdgeOnVertex = 1, vertexDegree
+          if (mesh%edgesOnVertex(iLocalEdgeOnVertex,iVertex) == iEdgeOnEdge) exit
+        end do
+        mesh%weightsOnEdge(i,iEdge) = n(iLocalEdge,iCell) / t(iLocalEdgeOnVertex,iVertex) * (mesh%weightsOnEdge(i,iEdge) - 0.5)
+        mesh%weightsOnEdge(i,iEdge) = mesh%weightsOnEdge(i,iEdge) * mesh%dcEdge(iEdge) / mesh%dvEdge(iEdgeOnEdge)
+      end do
+    end do
+    deallocate(R)
+    deallocate(n)
+    deallocate(t)
+
+  end subroutine calc_weightsOnEdge
 
 end module mpas_mesh_mod
