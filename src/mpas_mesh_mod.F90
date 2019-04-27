@@ -516,7 +516,7 @@ contains
           if (mesh%edgesOnVertex(iLocalEdgeOnVertex,iVertex) == iEdgeOnEdge) exit
         end do
         mesh%weightsOnEdge(i,iEdge) = n(iLocalEdge,iCell) / t(iLocalEdgeOnVertex,iVertex) * (mesh%weightsOnEdge(i,iEdge) - 0.5)
-        mesh%weightsOnEdge(i,iEdge) = mesh%weightsOnEdge(i,iEdge) * mesh%dvEdge(iEdge) / mesh%dcEdge(iEdgeOnEdge)
+        mesh%weightsOnEdge(i,iEdge) = mesh%weightsOnEdge(i,iEdge) * mesh%dvEdge(iEdgeOnEdge) / mesh%dcEdge(iEdge)
       end do
     end do
     deallocate(R)
