@@ -448,12 +448,8 @@ contains
         do iLocalVertex = 1, mesh%nEdgesOnCell(iCell)
           if (mesh%verticesOnCell(iLocalVertex,iCell) == iVertex) exit
         end do
-        R(iLocalVertex,iCell) = R(iLocalVertex,iCell) + mesh%kiteAreasOnVertex(iLocalCell,iVertex)
+        R(iLocalVertex,iCell) = mesh%kiteAreasOnVertex(iLocalCell,iVertex) / mesh%areaCell(iCell)
       end do
-    end do
-    do iCell = 1, mesh%nCells
-      nEdgesOnCell = mesh%nEdgesOnCell(iCell)
-      R(:nEdgesOnCell,iCell) = R(:nEdgesOnCell,iCell) / sum(R(:nEdgesOnCell,iCell))
     end do
     ! Set normal vector indicator.
     n = 0
