@@ -437,9 +437,9 @@ contains
 
     real(8), allocatable :: R(:,:)
     integer, allocatable :: n(:,:), t(:,:)
-    integer iCell, iEdge, iEdgeOnEdge, iVertex, i, j, i0
+    integer iCell1, iCell2, iCell, iEdge, iEdgeOnEdge, iVertex, i, j
     integer iLocalCell, iLocalVertex
-    integer nEdgesOnCell
+    integer nEdgesOnCell1, nEdgesOnCell2, nEdgesOnCell, jEnd
     integer iLocalEdge1, iLocalEdge2, iLocalEdge, iLocalEdgeOnVertex
 
     ! Calculate weightsOnEdge for reconstructing tangential velocities.
@@ -447,7 +447,6 @@ contains
     allocate(n(maxEdges,mesh%nCells))
     allocate(t(vertexDegree,mesh%nVertices))
     ! Calculate divergence interpolation weights.
-    R = 0.0
     do iVertex = 1, mesh%nVertices
       do iLocalCell = 1, vertexDegree
         iCell = mesh%cellsOnVertex(iLocalCell,iVertex)
@@ -458,8 +457,14 @@ contains
         R(iLocalVertex,iCell) = mesh%kiteAreasOnVertex(iLocalCell,iVertex) / mesh%areaCell(iCell)
       end do
     end do
+#ifndef NDEBUG
+    do iCell = 1, mesh%nCells
+      if (abs(sum(R(:mesh%nEdgesOnCell(iCell),iCell)) - 1.0) > 1.0d-10) then
+        call log_error('Internal error!', __FILE__, __LINE__)
+      end if
+    end do
+#endif
     ! Set normal vector indicator.
-    n = 0
     do iCell = 1, mesh%nCells
       do iLocalEdge = 1, mesh%nEdgesOnCell(iCell)
         iEdge = mesh%edgesOnCell(iLocalEdge,iCell)
@@ -473,7 +478,6 @@ contains
       end do
     end do
     ! Set tangential vector indicator.
-    t = 0
     do iVertex = 1, mesh%nVertices
       do iLocalEdge = 1, vertexDegree
         iEdge = mesh%edgesOnVertex(iLocalEdge,iVertex)
@@ -486,44 +490,58 @@ contains
         end if
       end do
     end do
+    ! Loop through the target edge.
     do iEdge = 1, mesh%nEdges
+      iCell1 = mesh%cellsOnEdge(1,iEdge)
+      iCell2 = mesh%cellsOnEdge(2,iEdge)
+      nEdgesOnCell1 = mesh%nEdgesOnCell(iCell1)
+      nEdgesOnCell2 = mesh%nEdgesOnCell(iCell2)
       ! Get the local index of edge on both side cells.
-      do iLocalEdge = 1, mesh%nEdgesOnCell(mesh%cellsOnEdge(1,iEdge))
-        if (mesh%edgesOnCell(iLocalEdge,mesh%cellsOnEdge(1,iEdge)) == iEdge) then
+      iLocalEdge1 = 0
+      do iLocalEdge = 1, nEdgesOnCell1
+        if (mesh%edgesOnCell(iLocalEdge,iCell1) == iEdge) then
           iLocalEdge1 = iLocalEdge
           exit
         end if
       end do
-      do iLocalEdge = 1, mesh%nEdgesOnCell(mesh%cellsOnEdge(2,iEdge))
-        if (mesh%edgesOnCell(iLocalEdge,mesh%cellsOnEdge(2,iEdge)) == iEdge) then
+      if (iLocalEdge1 == 0) call log_error('Internal error!', __FILE__, __LINE__)
+      iLocalEdge2 = 0
+      do iLocalEdge = 1, nEdgesOnCell2
+        if (mesh%edgesOnCell(iLocalEdge,iCell2) == iEdge) then
           iLocalEdge2 = iLocalEdge
           exit
         end if
       end do
-      ! Loop through all the involved edges.
+      if (iLocalEdge2 == 0) call log_error('Internal error!', __FILE__, __LINE__)
+      ! Loop through all the involved edges that contribute to the target edge.
       do i = 1, mesh%nEdgesOnEdge(iEdge)
         iEdgeOnEdge = mesh%edgesOnEdge(i,iEdge)
-        if (any(mesh%cellsOnEdge(:,iEdgeOnEdge) == mesh%cellsOnEdge(1,iEdge))) then
+        if (any(mesh%cellsOnEdge(:,iEdgeOnEdge) == iCell1)) then
           ! For the first cell
-          i0 = 1
-          iCell = mesh%cellsOnEdge(1,iEdge)
-          iLocalEdge = iLocalEdge1
-        else
+          iCell = iCell1
+          nEdgesOnCell = nEdgesOnCell1
+          jEnd = nEdgesOnCell1 - i
+          iLocalEdge = iLocalEdge1 + i
+        else if (any(mesh%cellsOnEdge(:,iEdgeOnEdge) == iCell2)) then
           ! For the second cell
-          if (i0 == 1) i0 = i
-          iCell = mesh%cellsOnEdge(2,iEdge)
-          iLocalEdge = iLocalEdge2
+          iCell = iCell2
+          nEdgesOnCell = nEdgesOnCell2
+          jEnd = nEdgesOnCell2 - i + nEdgesOnCell1 - 1
+          iLocalEdge = iLocalEdge2 + i - nEdgesOnCell1 + 1
         end if
+        if (iLocalEdge > nEdgesOnCell) iLocalEdge = iLocalEdge - nEdgesOnCell
         iLocalVertex = iLocalEdge
-        do j = i0, i
+        do j = 1, jEnd
           iLocalVertex = iLocalVertex + 1
-          if (iLocalVertex > mesh%nEdgesOnCell(iCell)) iLocalVertex = 1
+          if (iLocalVertex > nEdgesOnCell) iLocalVertex = 1
           iVertex = mesh%verticesOnCell(iLocalVertex,iCell)
           mesh%weightsOnEdge(i,iEdge) = mesh%weightsOnEdge(i,iEdge) + R(iLocalVertex,iCell)
         end do
+        ! Get the local index of the target edge on the final traversed vertex.
         do iLocalEdgeOnVertex = 1, vertexDegree
-          if (mesh%edgesOnVertex(iLocalEdgeOnVertex,iVertex) == iEdgeOnEdge) exit
+          if (mesh%edgesOnVertex(iLocalEdgeOnVertex,iVertex) == iEdge) exit
         end do
+        if (iLocalEdgeOnVertex > vertexDegree) call log_error('Internal error!', __FILE__, __LINE__)
         mesh%weightsOnEdge(i,iEdge) = n(iLocalEdge,iCell) / t(iLocalEdgeOnVertex,iVertex) * (mesh%weightsOnEdge(i,iEdge) - 0.5)
         mesh%weightsOnEdge(i,iEdge) = mesh%weightsOnEdge(i,iEdge) * mesh%dvEdge(iEdgeOnEdge) / mesh%dcEdge(iEdge)
       end do
