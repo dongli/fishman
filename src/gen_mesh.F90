@@ -11,13 +11,19 @@ program gen_mesh
 
   implicit none
 
-  integer, parameter :: nx = 40962
+  character(1024) grids_file_path
+  integer nx
   real(8), allocatable :: x(:,:)
+
+  call get_command_argument(1, grids_file_path)
+
+
+  call io_init()
+  call io_create_dataset(name='grids', file_path=grids_file_path, mode='input')
+  call io_get_dim('location_nv', dataset_name='grids', size=nx)
 
   allocate(x(nx,3))
 
-  call io_init()
-  call io_create_dataset(name='grids', file_path='./point.' // trim(to_string(nx)) // '.nc', mode='input')
   call io_start_input('grids')
   call io_input('vtx_p', x, dataset_name='grids')
   call io_end_input('grids')

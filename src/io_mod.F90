@@ -18,6 +18,7 @@ module io_mod
   public io_output
   public io_end_output
   public io_start_input
+  public io_get_dim
   public io_get_att
   public io_input
   public io_end_input
@@ -764,6 +765,48 @@ contains
     end if
 
   end subroutine io_start_input
+
+  subroutine io_get_dim(name, dataset_name, size)
+
+    character(*), intent(in) :: name
+    character(*), intent(in) :: dataset_name
+    integer, intent(out), optional :: size
+
+    type(dataset_type), pointer :: dataset
+    type(dim_type), pointer :: dim
+    integer ierr, dimid
+
+    ! TODO: Try to refactor mode usage in dataset key.
+    dataset => get_dataset(name=dataset_name, mode='input')
+
+    if (dataset%dims%hashed(name)) then
+      dim => dataset%get_dim(name)
+    else
+      allocate(dim)
+      dim%name = name
+      call dataset%dims%insert(name, dim)
+      deallocate(dim)
+      dim => dataset%get_dim(name)
+
+      ! Temporally open the data file.
+      ierr = NF90_OPEN(dataset%file_path, NF90_NOWRITE, dataset%id)
+      if (ierr /= NF90_NOERR) then
+        call log_error('Failed to open NetCDF file ' // trim(dataset%file_path) // '! ' // trim(NF90_STRERROR(ierr)), __FILE__, __LINE__)
+      end if
+
+      ierr = NF90_INQ_DIMID(dataset%id, name, dimid)
+      if (ierr /= NF90_NOERR) then
+        call log_error('Failed to inquire dimension ' // trim(name) // ' in NetCDF file ' // trim(dataset%file_path) // '! ' // trim(NF90_STRERROR(ierr)), __FILE__, __LINE__)
+      end if
+
+      ierr = NF90_INQUIRE_DIMENSION(dataset%id, dimid, len=dim%size)
+      if (ierr /= NF90_NOERR) then
+        call log_error('Failed to inquire size of dimension ' // trim(name) // ' in NetCDF file ' // trim(dataset%file_path) // '! ' // trim(NF90_STRERROR(ierr)), __FILE__, __LINE__)
+      end if
+    end if
+    if (present(size)) size = dim%size
+
+  end subroutine io_get_dim
 
   function io_get_att_str(name, dataset_name) result(res)
 
