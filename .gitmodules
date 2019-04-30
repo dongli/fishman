@@ -1,3 +1,6 @@
 [submodule "lib/container"]
 	path = lib/container
 	url = https://github.com/dongli/fortran-container
+[submodule "lib/fiona"]
+	path = lib/fiona
+	url = https://github.com/dongli/fiona

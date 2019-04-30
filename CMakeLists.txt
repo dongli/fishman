@@ -42,6 +42,8 @@ endif ()
 add_subdirectory(lib/container)
 include_directories(${CMAKE_BINARY_DIR}/fortran_container)
 
+add_subdirectory(lib/fiona)
+
 set(sources
   src/const_mod.F90
   src/log_mod.F90
@@ -49,13 +51,12 @@ set(sources
   src/random_number_mod.F90
   src/math_mod.F90
   src/sphere_geometry_mod.F90
-  src/io_mod.F90
   src/delaunay_voronoi_mod.F90
   src/mpas_mesh_mod.F90
 )
 
 add_library(fishman ${sources})
-target_link_libraries(fishman netcdf netcdff fortran_container)
+target_link_libraries(fishman netcdf netcdff fortran_container fiona)
 
 add_executable(gen_mesh.exe src/gen_mesh.F90)
 target_link_libraries(gen_mesh.exe fishman)

@@ -1,11 +1,6 @@
 program gen_mesh
 
-  use const_mod
-  use log_mod
   use io_mod
-  use string_mod
-  use array_mod
-  use linked_list_mod
   use delaunay_voronoi_mod
   use mpas_mesh_mod
 
