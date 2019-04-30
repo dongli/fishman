@@ -71,6 +71,7 @@ module io_mod
     module procedure io_output_0d
     module procedure io_output_1d
     module procedure io_output_2d
+    module procedure io_output_3d
   end interface io_output
 
   interface io_get_att
@@ -675,6 +676,54 @@ contains
     end if
 
   end subroutine io_output_2d
+
+  subroutine io_output_3d(name, array, dataset_name)
+
+    character(*), intent(in)           :: name
+    class(*)    , intent(in)           :: array(:,:,:)
+    character(*), intent(in), optional :: dataset_name
+
+    type(dataset_type), pointer :: dataset
+    type(var_type    ), pointer :: var
+    integer lb1, ub1, lb2, ub2, lb3, ub3
+    integer i, ierr
+    integer start(3), count(3)
+
+    if (present(dataset_name)) then
+      dataset => get_dataset(name=dataset_name, mode='output')
+    else
+      dataset => get_dataset(mode='output')
+    end if
+    var => dataset%get_var(name)
+
+    lb1 = lbound(array, 1)
+    ub1 = ubound(array, 1)
+    lb2 = lbound(array, 2)
+    ub2 = ubound(array, 2)
+    lb3 = lbound(array, 3)
+    ub3 = ubound(array, 3)
+
+    do i = 1, size(var%dims)
+      if (var%dims(i)%ptr%size == NF90_UNLIMITED) then
+        start(i) = dataset%time_step
+        count(i) = 1
+      else
+        start(i) = 1
+        count(i) = var%dims(i)%ptr%size
+      end if
+    end do
+
+    select type (array)
+    type is (integer)
+      ierr = NF90_PUT_VAR(dataset%id, var%id, array(lb1:ub1,lb2:ub2,lb3:ub3), start, count)
+    type is (real(8))
+      ierr = NF90_PUT_VAR(dataset%id, var%id, array(lb1:ub1,lb2:ub2,lb3:ub3), start, count)
+    end select
+    if (ierr /= NF90_NOERR) then
+      call log_error('Failed to write variable ' // trim(name) // ' to ' // trim(dataset%name) // '!' // NF90_STRERROR(ierr))
+    end if
+
+  end subroutine io_output_3d
 
   subroutine io_end_output(dataset_name)
 
