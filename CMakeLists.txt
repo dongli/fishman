@@ -40,7 +40,6 @@ else ()
 endif ()
 
 add_subdirectory(lib/container)
-
 add_subdirectory(lib/fiona)
 
 set(sources
