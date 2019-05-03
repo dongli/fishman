@@ -40,7 +40,6 @@ else ()
 endif ()
 
 add_subdirectory(lib/container)
-include_directories(${CMAKE_BINARY_DIR}/fortran_container)
 
 add_subdirectory(lib/fiona)
 
