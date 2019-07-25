@@ -1462,26 +1462,28 @@ contains
         write(*, '(A)', advance='no') trim(to_string(DVT%id)) // ', '
       end do
       write(*, *)
-      if (present(details) .and. details) then
-        do i = 1, this%DVT%size
-          DVT => get_DVT(this%DVT, i)
-          call DVT%print()
-        end do
-        write(*, *) 'For NCL:'
-        write(*, '(A)', advance='no') '  Lon: (/'
-        do i = 1, this%DVT%size
-          DVT => get_DVT(this%DVT, i)
-          write(*, '(F10.5, ",")', advance='no') DVT%lon * deg
-        end do
-        DVT => get_DVT(this%DVT, 1)
-        write(*, '(F10.5, A)') DVT%lon * deg, '/)'
-        write(*, '(A)', advance='no') '  Lat: (/'
-        do i = 1, this%DVT%size
-          DVT => get_DVT(this%DVT, i)
-          write(*, '(F10.5, ",")', advance='no') DVT%lat * deg
-        end do
-        DVT => get_DVT(this%DVT, 1)
-        write(*, '(F10.5, A)') DVT%lat * deg, '/)'
+      if (present(details)) then
+        if (details) then
+          do i = 1, this%DVT%size
+            DVT => get_DVT(this%DVT, i)
+            call DVT%print()
+          end do
+          write(*, *) 'For NCL:'
+          write(*, '(A)', advance='no') '  Lon: (/'
+          do i = 1, this%DVT%size
+            DVT => get_DVT(this%DVT, i)
+            write(*, '(F10.5, ",")', advance='no') DVT%lon * deg
+          end do
+          DVT => get_DVT(this%DVT, 1)
+          write(*, '(F10.5, A)') DVT%lon * deg, '/)'
+          write(*, '(A)', advance='no') '  Lat: (/'
+          do i = 1, this%DVT%size
+            DVT => get_DVT(this%DVT, i)
+            write(*, '(F10.5, ",")', advance='no') DVT%lat * deg
+          end do
+          DVT => get_DVT(this%DVT, 1)
+          write(*, '(F10.5, A)') DVT%lat * deg, '/)'
+        end if
       end if
     else
       write(*, *) '  Vertices: Not connected with vertices yet.'
