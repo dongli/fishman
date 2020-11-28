@@ -17,7 +17,7 @@ module mpas_mesh_mod
   public mpas_mesh_type
 
   integer, parameter :: vertexDegree = 3
-  integer, parameter :: maxEdges = 10
+  integer, parameter :: maxEdges = 6
   integer, parameter :: maxEdges2 = maxEdges * 2
 
   type mpas_mesh_type
