@@ -1,13 +1,12 @@
 module delaunay_voronoi_mod
 
+  use flogger
+  use container
+  use string
   use const_mod
-  use log_mod
-  use string_mod
   use random_number_mod
   use math_mod
   use sphere_geometry_mod
-  use linked_list_mod
-  use array_mod
 
   implicit none
 

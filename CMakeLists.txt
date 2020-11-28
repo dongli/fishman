@@ -41,6 +41,7 @@ endif ()
 
 add_subdirectory(lib/container)
 add_subdirectory(lib/fiona)
+add_subdirectory(lib/string)
 add_subdirectory(lib/flogger)
 
 set(sources
@@ -55,7 +56,7 @@ set(sources
 )
 
 add_library(fishman ${sources})
-target_link_libraries(fishman netcdf netcdff fortran_container flogger fiona)
+target_link_libraries(fishman netcdf netcdff fortran_container fortran_string flogger fiona)
 
 add_executable(gen_mesh.exe src/gen_mesh.F90)
 target_link_libraries(gen_mesh.exe fishman)
